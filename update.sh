@@ -24,6 +24,11 @@ git pull --ff-only origin "${BRANCH}"
 source .venv/bin/activate
 pip install -r requirements.txt
 
+if ! grep -qE '^MCP_PASSWORD_HASH=.+' .env 2>/dev/null; then
+  echo "ChatGPT OAuth password is not set. Run:"
+  echo "  ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/setup_mcp_oauth.py"
+fi
+
 if ! pytest -q; then
   echo
   echo "Tests failed. Production service was NOT restarted."

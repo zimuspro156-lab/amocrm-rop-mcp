@@ -39,11 +39,20 @@ class Settings(BaseSettings):
     mcp_port: int = Field(default=8000, ge=1, le=65535)
     mcp_path: str = "/mcp"
 
+    mcp_public_url: str = ""
     mcp_auth_token: str = ""
     mcp_auth_issuer_url: str = ""
-    mcp_public_url: str = ""
     mcp_allowed_hosts: str = ""
     mcp_disable_dns_rebinding_protection: bool = False
+
+    oauth_issuer: str = ""
+    oauth_client_id: str = "chatgpt-amocrm-mcp"
+    oauth_redirect_uri: str = ""
+    oauth_access_token_ttl: int = Field(default=3600, ge=60)
+    oauth_refresh_token_ttl: int = Field(default=2592000, ge=300)
+    oauth_auth_code_ttl: int = Field(default=300, ge=30)
+    mcp_login: str = ""
+    mcp_password_hash: str = ""
 
     log_level: str = "INFO"
     http_timeout_seconds: float = Field(default=30.0, gt=0)
@@ -64,6 +73,13 @@ class Settings(BaseSettings):
         cleaned = cleaned.removesuffix(".amocrm.ru").removesuffix(".kommo.com")
         return cleaned
 
+    @field_validator("default_pipeline_id", "amocrm_lost_reason_field_id", mode="before")
+    @classmethod
+    def _empty_optional_int(cls, value: object) -> object:
+        if value in ("", None):
+            return None
+        return value
+
     @field_validator("mcp_path")
     @classmethod
     def _normalize_path(cls, value: str) -> str:
@@ -71,6 +87,16 @@ class Settings(BaseSettings):
         if not path.startswith("/"):
             path = f"/{path}"
         return path.rstrip("/") or "/mcp"
+
+    @field_validator("mcp_public_url", "oauth_issuer", mode="before")
+    @classmethod
+    def _normalize_public_origin(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        url = value.strip().rstrip("/")
+        if url.endswith("/mcp"):
+            url = url[:-4].rstrip("/")
+        return url
 
     @property
     def version(self) -> str:
@@ -94,9 +120,42 @@ class Settings(BaseSettings):
 
     @property
     def allowed_hosts(self) -> list[str]:
-        if not self.mcp_allowed_hosts.strip():
-            return []
-        return [item.strip() for item in self.mcp_allowed_hosts.split(",") if item.strip()]
+        if self.mcp_allowed_hosts.strip():
+            return [item.strip() for item in self.mcp_allowed_hosts.split(",") if item.strip()]
+        host = self.public_host
+        if host:
+            return [host, f"{host}:*"]
+        return []
+
+    @property
+    def oauth_issuer_url(self) -> str:
+        return (self.oauth_issuer or self.mcp_public_url).rstrip("/")
+
+    @property
+    def mcp_resource_url(self) -> str:
+        origin = self.mcp_public_url.rstrip("/")
+        if not origin:
+            return f"http://{self.mcp_host}:{self.mcp_port}{self.mcp_path}"
+        return origin + self.mcp_path
+
+    @property
+    def public_host(self) -> str:
+        url = self.mcp_public_url.strip()
+        if not url:
+            return ""
+        cleaned = url.removeprefix("https://").removeprefix("http://")
+        return cleaned.split("/")[0].split(":")[0]
+
+    @property
+    def oauth_redirect_uris(self) -> list[str]:
+        return [item.strip() for item in self.oauth_redirect_uri.split(",") if item.strip()]
+
+    @property
+    def oauth_store_dir(self) -> Path:
+        return self.tokens_path.parent
+
+    def mcp_oauth_enabled(self) -> bool:
+        return bool(self.mcp_public_url.strip() and self.mcp_login.strip() and self.mcp_password_hash.strip())
 
     def require_oauth_app(self) -> None:
         missing: list[str] = []
@@ -114,7 +173,7 @@ class Settings(BaseSettings):
             raise ConfigurationError("Missing required amoCRM OAuth settings: " + ", ".join(missing))
 
     def mcp_auth_enabled(self) -> bool:
-        return bool(self.mcp_auth_token.strip())
+        return self.mcp_oauth_enabled() or bool(self.mcp_auth_token.strip())
 
 
 @lru_cache(maxsize=1)

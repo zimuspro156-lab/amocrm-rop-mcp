@@ -16,6 +16,7 @@ from config import Settings, get_settings
 from health import health_payload
 from logging_config import setup_logging
 from mcp_auth import build_auth
+from oauth_server import McpOAuth
 from services import ROPService
 from token_manager import FileTokenStorage, TokenManager
 from tools import register_tools
@@ -42,6 +43,7 @@ If a numeric id is unknown, search first. Won status id is 142, lost status id i
 """.strip()
 
 _service: ROPService | None = None
+_oauth: McpOAuth | None = None
 _settings: Settings = get_settings()
 
 
@@ -73,9 +75,23 @@ def get_service() -> ROPService:
     return _service
 
 
+def get_oauth() -> McpOAuth | None:
+    global _oauth
+    settings = get_settings()
+    if _oauth is None and settings.mcp_oauth_enabled():
+        _oauth = McpOAuth.from_settings(settings)
+    return _oauth
+
+
+def _register_oauth_routes(mcp_server: MCPServer, oauth: McpOAuth) -> None:
+    for path, methods, handler in oauth.handlers():
+        mcp_server.custom_route(path, methods=methods)(handler)
+
+
 def create_mcp() -> MCPServer:
     settings = get_settings()
-    verifier, auth = build_auth(settings)
+    oauth = get_oauth()
+    verifier, auth = build_auth(settings, oauth)
     kwargs: dict[str, Any] = {
         "version": __version__,
         "instructions": INSTRUCTIONS,
@@ -85,9 +101,14 @@ def create_mcp() -> MCPServer:
         kwargs["token_verifier"] = verifier
         kwargs["auth"] = auth
     elif not settings.mcp_auth_enabled() and settings.mcp_host not in {"127.0.0.1", "localhost", "::1"}:
-        logger.warning("MCP is binding to %s without MCP_AUTH_TOKEN. Do not expose /mcp to the internet.", settings.mcp_host)
+        logger.warning(
+            "MCP is binding to %s without ChatGPT OAuth. Do not expose /mcp to the internet.",
+            settings.mcp_host,
+        )
     mcp_server = MCPServer(SERVICE_TITLE, **kwargs)
     register_tools(mcp_server, get_service)
+    if oauth is not None:
+        _register_oauth_routes(mcp_server, oauth)
 
     @mcp_server.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:

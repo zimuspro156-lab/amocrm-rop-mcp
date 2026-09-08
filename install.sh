@@ -70,8 +70,25 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 chmod 750 "${APP_DIR}"
-chmod 640 "${APP_DIR}/.env"
+chmod 640 "${APP_DIR}/.env" || true
 chmod 700 "${APP_DIR}/data"
+chmod 755 "${APP_DIR}/scripts/"*.py || true
+
+PUBLIC_URL="${MCP_PUBLIC_URL:-}"
+if [[ -z "${PUBLIC_URL}" && -f "${APP_DIR}/.env" ]]; then
+  PUBLIC_URL="$(awk -F= '/^MCP_PUBLIC_URL=/{print substr($0, index($0,$2))}' "${APP_DIR}/.env" || true)"
+fi
+if [[ -z "${PUBLIC_URL}" && -t 0 ]]; then
+  read -r -p "Публичный HTTPS адрес без /mcp (например https://amocrm-mcp.example.com): " PUBLIC_URL || true
+fi
+
+SETUP_ARGS=(--env-file "${APP_DIR}/.env")
+if [[ -n "${PUBLIC_URL}" ]]; then
+  SETUP_ARGS+=(--public-url "${PUBLIC_URL}")
+fi
+"${APP_DIR}/.venv/bin/python" "${APP_DIR}/scripts/setup_mcp_oauth.py" "${SETUP_ARGS[@]}"
+chmod 640 "${APP_DIR}/.env"
+
 chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
 # Keep root able to update via git while the service user owns runtime files.
 chown root:root "${APP_DIR}/install.sh" "${APP_DIR}/update.sh" || true
@@ -116,8 +133,10 @@ fi
 
 log
 log "MCP endpoint stays on 127.0.0.1:8000 by default. Do not publish port 8000 to the internet."
-log "Put HTTPS (Caddy / Nginx / Traefik / Cloudflare Tunnel) in front of /mcp."
+log "Put HTTPS (Caddy / Nginx / Traefik / Cloudflare Tunnel) in front of the whole origin, not only /mcp."
+log "OAuth uses /authorize, /token and /.well-known/..."
 log "Next:"
-log "  sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/oauth_setup.py"
-log "  sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/check_connection.py"
-log "  sudo systemctl restart ${SERVICE_NAME}"
+log "  1. Fill amoCRM credentials in ${APP_DIR}/.env"
+log "  2. sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/oauth_setup.py"
+log "  3. sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/check_connection.py"
+log "  4. Copy ChatGPT Callback URL into OAUTH_REDIRECT_URI and: sudo systemctl restart ${SERVICE_NAME}"

@@ -8,7 +8,7 @@ from typing import Any
 
 SECRET_PATTERNS = (
     re.compile(r"(Authorization:\s*Bearer)\s+\S+", re.IGNORECASE),
-    re.compile(r"(access_token|refresh_token|client_secret|authorization)([\"']?\s*[:=]\s*[\"']?)[^\"'\s&]+", re.IGNORECASE),
+    re.compile(r"(access_token|refresh_token|client_secret|authorization|password_hash|MCP_PASSWORD)([\"']?\s*[:=]\s*[\"']?)[^\"'\s&]+", re.IGNORECASE),
     re.compile(r"(Bearer)\s+[A-Za-z0-9._\-]+", re.IGNORECASE),
 )
 

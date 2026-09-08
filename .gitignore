@@ -4,6 +4,8 @@
 
 tokens.json
 data/tokens.json
+data/oauth.sqlite
+data/*.sqlite
 data/*.tmp
 
 venv/
