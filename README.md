@@ -175,28 +175,17 @@ curl http://127.0.0.1:8000/health
 
 `install.sh` создаёт пользователя `amocrm-mcp`, venv, systemd unit `amocrm-rop-mcp` и **не открывает порт 8000 наружу**.
 
-## HTTPS перед MCP
+## HTTPS / Cloudflare
 
-Нужен публичный URL вида `https://mcp.example.com/mcp`. В `.env` укажите `MCP_PUBLIC_URL=https://mcp.example.com` **без `/mcp`**. Tunnel/прокси должен пропускать весь origin: `/mcp`, `/authorize`, `/token`, `/.well-known/...`. Варианты (любой один):
+Отдельный туннель этого проекта, не WB:
 
-- **Caddy**
-- **Nginx**
-- **Traefik**
-- **Cloudflare Tunnel**
-
-Пример Caddy:
-
-```caddy
-mcp.example.com {
-    reverse_proxy 127.0.0.1:8000
-}
+```bash
+cd /opt/amocrm-rop-mcp
+sudo chmod +x install-cloudflare.sh
+sudo ./install-cloudflare.sh
 ```
 
-Для browser-клиентов reverse proxy не должен буферизовать SSE (`proxy_buffering off` в Nginx).
-
-Если `Host` не localhost, задайте `MCP_ALLOWED_HOSTS=mcp.example.com,mcp.example.com:*` либо `MCP_DISABLE_DNS_REBINDING_PROTECTION=true` **только** когда proxy уже контролирует Host.
-
-Временный туннель (ngrok / Cloudflare quick tunnel) — **только development**.
+Скрипт качает `cloudflared` в `/opt/amocrm-rop-mcp/runtime/`, поднимает службу `amocrm-cloudflared` на `localhost:8000` и пишет выданный `https://*.trycloudflare.com` в `MCP_PUBLIC_URL`. Службу `wb-cloudflared` не трогает.
 
 ## Обновление
 

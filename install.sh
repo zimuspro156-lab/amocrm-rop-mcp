@@ -101,8 +101,8 @@ chmod 640 "${APP_DIR}/.env"
 
 chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
 # Keep root able to update via git while the service user owns runtime files.
-chown root:root "${APP_DIR}/install.sh" "${APP_DIR}/update.sh" || true
-chmod 755 "${APP_DIR}/install.sh" "${APP_DIR}/update.sh"
+chown root:root "${APP_DIR}/install.sh" "${APP_DIR}/update.sh" "${APP_DIR}/install-cloudflare.sh" || true
+chmod 755 "${APP_DIR}/install.sh" "${APP_DIR}/update.sh" "${APP_DIR}/install-cloudflare.sh"
 
 MCP_PORT_VALUE="$(awk -F= '/^MCP_PORT=/{print substr($0, index($0,$2))}' "${APP_DIR}/.env" 2>/dev/null || true)"
 MCP_PORT_VALUE="${MCP_PORT_VALUE:-8000}"
@@ -157,11 +157,7 @@ fi
 log
 log "Managed systemd unit: ${SERVICE_NAME}. Other MCP units were not restarted."
 log "MCP endpoint stays on 127.0.0.1:${MCP_PORT_VALUE} by default. Do not publish this port to the internet."
-log "Cloudflare next: add a hostname on the existing tunnel → HTTP localhost:${MCP_PORT_VALUE}, Path empty."
-log "Paste the https:// address Cloudflare shows into MCP_PUBLIC_URL and OAUTH_ISSUER, then restart ${SERVICE_NAME}."
-log "OAuth uses /authorize, /token and /.well-known/..."
 log "Next:"
-log "  1. Fill amoCRM credentials in ${APP_DIR}/.env"
-log "  2. sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/oauth_setup.py"
-log "  3. sudo -u ${APP_USER} ${APP_DIR}/.venv/bin/python ${APP_DIR}/scripts/check_connection.py"
-log "  4. Copy ChatGPT Callback URL into OAUTH_REDIRECT_URI and: sudo systemctl restart ${SERVICE_NAME}"
+log "  sudo ./install-cloudflare.sh"
+log "That command downloads a private cloudflared into this project and prints the HTTPS URL."
+log "Then fill amoCRM credentials in ${APP_DIR}/.env and run oauth_setup.py"
