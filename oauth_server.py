@@ -200,6 +200,7 @@ class McpOAuth:
             "code_challenge_methods_supported": [PKCE_METHOD],
             "scopes_supported": list(SUPPORTED_SCOPES),
             "token_endpoint_auth_methods_supported": ["none"],
+            "authorization_response_iss_parameter_supported": True,
         }
 
     def protected_resource_metadata(self) -> dict[str, Any]:
@@ -243,6 +244,7 @@ class McpOAuth:
     def handlers(self) -> list[tuple[str, list[str], Handler]]:
         return [
             ("/.well-known/oauth-authorization-server", ["GET", "OPTIONS"], self.handle_as_metadata),
+            ("/.well-known/oauth-authorization-server/mcp", ["GET", "OPTIONS"], self.handle_as_metadata),
             ("/.well-known/oauth-protected-resource", ["GET", "OPTIONS"], self.handle_resource_metadata),
             ("/.well-known/oauth-protected-resource/mcp", ["GET", "OPTIONS"], self.handle_resource_metadata),
             ("/authorize", ["GET", "POST"], self.handle_authorize),
