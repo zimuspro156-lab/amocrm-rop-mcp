@@ -80,15 +80,17 @@ def main() -> int:
 
     lines = _parse_env(env_path.read_text(encoding="utf-8"))
     public_url = args.public_url.strip() or _get(lines, "MCP_PUBLIC_URL")
-    if not public_url and not args.non_interactive and sys.stdin.isatty():
-        public_url = input("Публичный HTTPS адрес без /mcp (например https://amocrm-mcp.example.com): ").strip()
+    if public_url in {"https://amocrm-mcp.example.com", "https://amocrm-mcp.ТВОЙ-ДОМЕН"}:
+        public_url = ""
     generated_password = ""
     if public_url:
         try:
             public_url = _normalize_origin(public_url)
         except ValueError as exc:
             print(f"✗ {exc}")
-            return 1
+            print("Адрес Cloudflare можно прописать в MCP_PUBLIC_URL позже. Сейчас продолжаем без него.")
+            public_url = ""
+    if public_url:
         lines = _set(lines, "MCP_PUBLIC_URL", public_url, overwrite=True)
         if not _get(lines, "OAUTH_ISSUER"):
             lines = _set(lines, "OAUTH_ISSUER", public_url, overwrite=True)
@@ -127,7 +129,8 @@ def main() -> int:
         print(f"Адрес подключения ChatGPT: {_get(lines, 'MCP_PUBLIC_URL')}/mcp")
         print("После создания connector скопируйте Callback URL в OAUTH_REDIRECT_URI и перезапустите сервис.")
     else:
-        print("Задайте MCP_PUBLIC_URL в .env (HTTPS без /mcp) и перезапустите setup.")
+        print("После Cloudflare впиши выданный https://... в MCP_PUBLIC_URL и OAUTH_ISSUER, затем:")
+        print("  sudo systemctl restart amocrm-rop-mcp")
     return 0
 
 

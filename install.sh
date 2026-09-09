@@ -92,16 +92,8 @@ chmod 640 "${APP_DIR}/.env" || true
 chmod 700 "${APP_DIR}/data"
 chmod 755 "${APP_DIR}/scripts/"*.py || true
 
-PUBLIC_URL="${MCP_PUBLIC_URL:-}"
-if [[ -z "${PUBLIC_URL}" && -f "${APP_DIR}/.env" ]]; then
-  PUBLIC_URL="$(awk -F= '/^MCP_PUBLIC_URL=/{print substr($0, index($0,$2))}' "${APP_DIR}/.env" || true)"
-fi
-if [[ -z "${PUBLIC_URL}" && -t 0 ]]; then
-  read -r -p "Публичный HTTPS адрес без /mcp (например https://amocrm-mcp.example.com): " PUBLIC_URL || true
-fi
-
-SETUP_ARGS=(--env-file "${APP_DIR}/.env")
-if [[ -n "${PUBLIC_URL}" ]]; then
+SETUP_ARGS=(--env-file "${APP_DIR}/.env" --non-interactive)
+if [[ -n "${PUBLIC_URL:-}" ]]; then
   SETUP_ARGS+=(--public-url "${PUBLIC_URL}")
 fi
 "${APP_DIR}/.venv/bin/python" "${APP_DIR}/scripts/setup_mcp_oauth.py" "${SETUP_ARGS[@]}"
@@ -165,7 +157,8 @@ fi
 log
 log "Managed systemd unit: ${SERVICE_NAME}. Other MCP units were not restarted."
 log "MCP endpoint stays on 127.0.0.1:${MCP_PORT_VALUE} by default. Do not publish this port to the internet."
-log "Put HTTPS (Caddy / Nginx / Traefik / Cloudflare Tunnel) in front of the whole origin, not only /mcp."
+log "Cloudflare next: add a hostname on the existing tunnel → HTTP localhost:${MCP_PORT_VALUE}, Path empty."
+log "Paste the https:// address Cloudflare shows into MCP_PUBLIC_URL and OAUTH_ISSUER, then restart ${SERVICE_NAME}."
 log "OAuth uses /authorize, /token and /.well-known/..."
 log "Next:"
 log "  1. Fill amoCRM credentials in ${APP_DIR}/.env"
