@@ -5,14 +5,35 @@ APP_NAME="amocrm-rop-mcp"
 APP_USER="amocrm-mcp"
 APP_DIR="/opt/${APP_NAME}"
 SERVICE_NAME="${APP_NAME}"
-PYTHON_BIN="${PYTHON_BIN:-python3.12}"
+PYTHON_BIN="${PYTHON_BIN:-}"
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+python_ok() {
+  local bin="$1"
+  command -v "${bin}" >/dev/null 2>&1 || return 1
+  "${bin}" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
+}
+
+pick_python() {
+  local candidate
+  for candidate in ${PYTHON_BIN:+"${PYTHON_BIN}"} python3.12 python3.11 python3; do
+    if python_ok "${candidate}"; then
+      PYTHON_BIN="${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [[ "${EUID}" -ne 0 ]]; then
   die "Run as root: sudo ./install.sh"
 fi
+
+log "Starting ${APP_NAME} installer"
+log "This installer only creates/restarts systemd unit ${SERVICE_NAME}."
+log "Other MCP services (for example wb-readonly-mcp) are not stopped or rewritten."
 
 if [[ ! -f /etc/os-release ]]; then
   die "Unsupported OS: /etc/os-release is missing"
@@ -23,22 +44,19 @@ if [[ "${ID:-}" != "ubuntu" && "${ID_LIKE:-}" != *"debian"* ]]; then
   log "Warning: this installer targets Ubuntu. Continuing anyway."
 fi
 
-if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-  PYTHON_BIN="python3"
-fi
-command -v "${PYTHON_BIN}" >/dev/null 2>&1 || die "Python 3.11+ is required"
-
-PY_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-"${PYTHON_BIN}" - <<'PY'
-import sys
-if sys.version_info < (3, 11):
-    raise SystemExit(1)
-PY
-log "Using Python ${PY_VERSION} (${PYTHON_BIN})"
-
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y python3-venv python3-pip git curl ca-certificates rsync
+apt-get install -y git curl ca-certificates rsync python3-pip
+apt-get install -y python3.12 python3.12-venv || true
+apt-get install -y python3.11 python3.11-venv || true
+apt-get install -y python3-venv || true
+
+if ! pick_python; then
+  die "Python 3.11+ is required. On Ubuntu 22.04 run: apt-get install -y python3.11 python3.11-venv"
+fi
+
+PY_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+log "Using Python ${PY_VERSION} (${PYTHON_BIN})"
 
 if ! id -u "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --home "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
@@ -94,6 +112,19 @@ chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
 chown root:root "${APP_DIR}/install.sh" "${APP_DIR}/update.sh" || true
 chmod 755 "${APP_DIR}/install.sh" "${APP_DIR}/update.sh"
 
+MCP_PORT_VALUE="$(awk -F= '/^MCP_PORT=/{print substr($0, index($0,$2))}' "${APP_DIR}/.env" 2>/dev/null || true)"
+MCP_PORT_VALUE="${MCP_PORT_VALUE:-8000}"
+if [[ ! "${MCP_PORT_VALUE}" =~ ^[0-9]+$ ]]; then
+  MCP_PORT_VALUE=8000
+fi
+if command -v ss >/dev/null 2>&1; then
+  if ss -ltn | grep -Eq ":${MCP_PORT_VALUE}\\>"; then
+    if ! systemctl is-active --quiet "${SERVICE_NAME}"; then
+      die "Port ${MCP_PORT_VALUE} is already in use. Pick a free MCP_PORT in ${APP_DIR}/.env (WB MCP uses 8788). Do not stop other MCP units."
+    fi
+  fi
+fi
+
 cat >/etc/systemd/system/${SERVICE_NAME}.service <<UNIT
 [Unit]
 Description=amoCRM ROP MCP Server
@@ -124,15 +155,16 @@ systemctl restart "${SERVICE_NAME}"
 sleep 2
 systemctl --no-pager --full status "${SERVICE_NAME}" || true
 
-if curl -fsS "http://127.0.0.1:8000/health" >/dev/null; then
-  log "Health check passed: http://127.0.0.1:8000/health"
+if curl -fsS "http://127.0.0.1:${MCP_PORT_VALUE}/health" >/dev/null; then
+  log "Health check passed: http://127.0.0.1:${MCP_PORT_VALUE}/health"
 else
   log "Service installed, but /health is not answering yet. Check: journalctl -u ${SERVICE_NAME} -n 100 --no-pager"
   log "If .env or tokens are incomplete, that is expected until OAuth setup."
 fi
 
 log
-log "MCP endpoint stays on 127.0.0.1:8000 by default. Do not publish port 8000 to the internet."
+log "Managed systemd unit: ${SERVICE_NAME}. Other MCP units were not restarted."
+log "MCP endpoint stays on 127.0.0.1:${MCP_PORT_VALUE} by default. Do not publish this port to the internet."
 log "Put HTTPS (Caddy / Nginx / Traefik / Cloudflare Tunnel) in front of the whole origin, not only /mcp."
 log "OAuth uses /authorize, /token and /.well-known/..."
 log "Next:"
