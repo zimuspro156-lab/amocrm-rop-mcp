@@ -92,11 +92,12 @@ def main() -> int:
             public_url = ""
     if public_url:
         lines = _set(lines, "MCP_PUBLIC_URL", public_url, overwrite=True)
-        if not _get(lines, "OAUTH_ISSUER"):
-            lines = _set(lines, "OAUTH_ISSUER", public_url, overwrite=True)
+        lines = _set(lines, "OAUTH_ISSUER", public_url, overwrite=True)
         host = urlparse(public_url).hostname or ""
-        if host and not _get(lines, "MCP_ALLOWED_HOSTS"):
-            lines = _set(lines, "MCP_ALLOWED_HOSTS", f"{host},{host}:*")
+        if host:
+            lines = _set(lines, "MCP_ALLOWED_HOSTS", f"{host},{host}:*", overwrite=True)
+        if host.endswith(".trycloudflare.com"):
+            lines = _set(lines, "MCP_DISABLE_DNS_REBINDING_PROTECTION", "true", overwrite=True)
 
     if not _get(lines, "OAUTH_CLIENT_ID"):
         lines = _set(lines, "OAUTH_CLIENT_ID", "chatgpt-amocrm-mcp")
