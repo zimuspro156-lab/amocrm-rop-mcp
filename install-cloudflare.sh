@@ -38,7 +38,6 @@ cat >/etc/systemd/system/${SERVICE}.service <<UNIT
 Description=Cloudflare Tunnel for amoCRM ROP MCP
 After=network-online.target amocrm-rop-mcp.service
 Wants=network-online.target
-Requires=amocrm-rop-mcp.service
 
 [Service]
 Type=simple
@@ -47,12 +46,12 @@ Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
 Environment=HOME=${APP_DIR}
 ExecStart=${BIN} tunnel --no-autoupdate --url http://127.0.0.1:${PORT}
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
+ReadWritePaths=${APP_DIR}
 
 [Install]
 WantedBy=multi-user.target
